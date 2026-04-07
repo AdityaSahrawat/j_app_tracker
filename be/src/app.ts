@@ -3,6 +3,7 @@ import express from "express";
 import morgan from "morgan";
 import { errorHandler } from "./middleware/errorHandler";
 import { notFound } from "./middleware/notFound";
+import { authRouter } from "./routes/auth";
 import { healthRouter } from "./routes/health";
 import { itemsRouter } from "./routes/items";
 
@@ -14,6 +15,7 @@ export function createApp() {
   app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
 
   app.use("/api/health", healthRouter);
+  app.use("/api/auth", authRouter);
   app.use("/api/items", itemsRouter);
 
   app.use(notFound);

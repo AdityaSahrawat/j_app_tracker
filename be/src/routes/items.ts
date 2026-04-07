@@ -1,8 +1,11 @@
 import { Router } from "express";
+import { requireAuth } from "../middleware/auth";
 import { ItemModel } from "../models/Item";
 import { asyncHandler } from "../utils/asyncHandler";
 
 export const itemsRouter = Router();
+
+itemsRouter.use(requireAuth);
 
 itemsRouter.get(
   "/",
