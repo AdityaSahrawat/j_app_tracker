@@ -15,7 +15,13 @@ npm run dev
 - `GET /api/health` → server status
 - `POST /api/auth/register` → `{ "email": "...", "password": "..." }` → returns `{ token, user }`
 - `POST /api/auth/login` → `{ "email": "...", "password": "..." }` → returns `{ token, user }`
-- `GET /api/items` → list items
-- `POST /api/items` → create item `{ "name": "..." }`
+- `GET /api/applications` → list applications (protected)
+- `POST /api/applications` → create application (protected)
+- `GET /api/applications/:id` → get application (protected)
+- `PATCH /api/applications/:id` → update application (protected)
+- `DELETE /api/applications/:id` → delete application (protected)
+
+- `GET /api/items` → list items (protected, demo)
+- `POST /api/items` → create item `{ "name": "..." }` (protected, demo)
 
 `/api/items` is protected — send `Authorization: Bearer <token>`.

@@ -4,6 +4,7 @@ import morgan from "morgan";
 import { errorHandler } from "./middleware/errorHandler";
 import { notFound } from "./middleware/notFound";
 import { authRouter } from "./routes/auth";
+import { applicationsRouter } from "./routes/applications";
 import { healthRouter } from "./routes/health";
 import { itemsRouter } from "./routes/items";
 
@@ -16,6 +17,7 @@ export function createApp() {
 
   app.use("/api/health", healthRouter);
   app.use("/api/auth", authRouter);
+  app.use("/api/applications", applicationsRouter);
   app.use("/api/items", itemsRouter);
 
   app.use(notFound);
