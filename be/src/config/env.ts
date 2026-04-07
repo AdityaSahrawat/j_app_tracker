@@ -26,12 +26,16 @@ export function getEnv(): Env {
 
   const mongoUri = process.env.MONGODB_URI;
   if (!mongoUri) {
-    throw new Error("Missing required env var: MONGODB_URI");
+    throw new Error(
+      "Missing required env var: MONGODB_URI (set it in be/.env; see be/.env.example)"
+    );
   }
 
   const jwtSecret = process.env.JWT_SECRET;
   if (!jwtSecret) {
-    throw new Error("Missing required env var: JWT_SECRET");
+    throw new Error(
+      "Missing required env var: JWT_SECRET (set it in be/.env; see be/.env.example)"
+    );
   }
 
   const jwtExpiresInRaw = process.env.JWT_EXPIRES_IN ?? "7d";

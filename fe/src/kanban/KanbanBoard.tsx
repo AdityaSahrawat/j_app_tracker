@@ -121,7 +121,7 @@ function buildBoard(applications: KanbanApplication[]): {
   return { cardsById, columns }
 }
 
-export function KanbanBoard({
+function KanbanBoardInner({
   applications,
   onMoveCard,
   onCardClick,
@@ -133,16 +133,12 @@ export function KanbanBoard({
   const built = useMemo(() => buildBoard(applications), [applications])
 
   const cardsById = built.cardsById
-  const [columns, setColumns] = useState<Record<ApplicationStatus, string[]>>(built.columns)
+  const [columns, setColumns] = useState<Record<ApplicationStatus, string[]>>(() => built.columns)
 
   const columnsRef = useRef(columns)
   useEffect(() => {
     columnsRef.current = columns
   }, [columns])
-
-  useEffect(() => {
-    setColumns(built.columns)
-  }, [built.columns])
 
   const dragStartContainerRef = useRef<ApplicationStatus | null>(null)
 
@@ -249,4 +245,17 @@ export function KanbanBoard({
       </div>
     </DndContext>
   )
+}
+
+export function KanbanBoard(props: {
+  applications: KanbanApplication[]
+  onMoveCard?: (id: string, toStatus: ApplicationStatus) => void
+  onCardClick?: (id: string) => void
+}) {
+  const boardKey = useMemo(
+    () => props.applications.map((a) => `${a.id}:${a.status}`).join('|'),
+    [props.applications],
+  )
+
+  return <KanbanBoardInner key={boardKey} {...props} />
 }

@@ -2,6 +2,8 @@ import { useMemo, useState, type FormEvent } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { login } from '../api/auth'
 import { useAuthToken, setToken } from '../auth/token'
+import { Spinner } from '../components/Spinner'
+import { useToast } from '../components/toast'
 
 function normalizeEmail(raw: string): string {
   return raw.trim().toLowerCase()
@@ -19,6 +21,7 @@ export default function LoginPage() {
   const token = useAuthToken()
   const navigate = useNavigate()
   const location = useLocation()
+  const toast = useToast()
 
   const fromPath = useMemo(() => getFromPath(location.state), [location.state])
 
@@ -56,6 +59,7 @@ export default function LoginPage() {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Login failed'
       setError(message)
+      toast.error(message)
     } finally {
       setIsSubmitting(false)
     }
@@ -102,7 +106,10 @@ export default function LoginPage() {
           ) : null}
 
           <button className="button" type="submit" disabled={isSubmitting}>
-            {isSubmitting ? 'Logging in…' : 'Login'}
+            <span className="inline-flex items-center gap-2">
+              {isSubmitting ? <Spinner size={14} /> : null}
+              {isSubmitting ? 'Logging in…' : 'Login'}
+            </span>
           </button>
         </form>
 

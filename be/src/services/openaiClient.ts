@@ -39,6 +39,50 @@ function joinUrl(baseUrl: string, path: string): string {
   return `${base}${p}`;
 }
 
+function clampText(value: string, maxLen: number): string {
+  const trimmed = value.trim();
+  if (!trimmed) return trimmed;
+  return trimmed.length > maxLen ? `${trimmed.slice(0, maxLen)}…` : trimmed;
+}
+
+function getOpenAiErrorMessage(data: unknown): string | null {
+  if (!isRecord(data)) return null;
+
+  const err = data.error;
+  if (!isRecord(err)) return null;
+
+  const msg = err.message;
+  return typeof msg === "string" && msg.trim() ? clampText(msg, 220) : null;
+}
+
+function buildUpstreamError(status: number, data: unknown): HttpError {
+  const upstreamMessage = getOpenAiErrorMessage(data);
+
+  if (status === 401 || status === 403) {
+    return new HttpError(502, "AI authentication failed (check OPENAI_API_KEY)", { expose: true });
+  }
+
+  if (status === 404) {
+    return new HttpError(502, "AI endpoint/model not found (check OPENAI_BASE_URL and OPENAI_MODEL)", {
+      expose: true,
+    });
+  }
+
+  if (status === 429) {
+    return new HttpError(503, "AI rate limited — try again shortly", { expose: true });
+  }
+
+  if (status >= 500) {
+    return new HttpError(503, "AI provider error — try again shortly", { expose: true });
+  }
+
+  if (upstreamMessage) {
+    return new HttpError(502, `AI request rejected: ${upstreamMessage}`, { expose: true });
+  }
+
+  return new HttpError(502, `AI request failed (upstream ${status})`, { expose: true });
+}
+
 export async function openaiJsonChatCompletion(options: {
   systemPrompt: string;
   userPrompt: string;
@@ -69,22 +113,25 @@ export async function openaiJsonChatCompletion(options: {
     const response = await fetch(joinUrl(env.OPENAI_BASE_URL, "/chat/completions"), {
       method: "POST",
       headers: {
-        authorization: `Bearer ${env.OPENAI_API_KEY}`,
+        Authorization: `Bearer ${env.OPENAI_API_KEY}`,
         "content-type": "application/json",
       },
       body: JSON.stringify(body),
       signal: controller.signal,
     });
 
+    const rawText = await response.text();
     let data: unknown = null;
-    try {
-      data = (await response.json()) as unknown;
-    } catch {
-      data = null;
+    if (rawText.trim()) {
+      try {
+        data = JSON.parse(rawText) as unknown;
+      } catch {
+        data = rawText;
+      }
     }
 
     if (!response.ok) {
-      throw new HttpError(502, "AI request failed", { expose: true });
+      throw buildUpstreamError(response.status, data);
     }
 
     const content = getAssistantContent(data);

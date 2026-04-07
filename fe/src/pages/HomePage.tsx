@@ -11,8 +11,11 @@ import {
   parseJobDescription,
   type ParsedJobDescription,
 } from '../api/ai'
+import { Spinner } from '../components/Spinner'
+import { useToast } from '../components/toast'
 import { KanbanBoard, type KanbanApplication } from '../kanban/KanbanBoard'
 import { STATUSES, STATUS_LABEL, type ApplicationStatus } from '../kanban/types'
+import { copyToClipboard } from '../utils/clipboard'
 
 type ApplicationFormState = {
   company: string
@@ -41,30 +44,6 @@ function isValidIsoDate(value: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(value)
 }
 
-async function copyToClipboard(text: string): Promise<void> {
-  if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
-    await navigator.clipboard.writeText(text)
-    return
-  }
-
-  const textarea = document.createElement('textarea')
-  textarea.value = text
-  textarea.setAttribute('readonly', 'true')
-  textarea.style.position = 'fixed'
-  textarea.style.left = '-9999px'
-  textarea.style.top = '0'
-  document.body.appendChild(textarea)
-  textarea.focus()
-  textarea.select()
-
-  const ok = document.execCommand('copy')
-  document.body.removeChild(textarea)
-
-  if (!ok) {
-    throw new Error('Copy failed')
-  }
-}
-
 function buildFormFromApplication(app: Application): ApplicationFormState {
   return {
     company: app.company,
@@ -78,6 +57,8 @@ function buildFormFromApplication(app: Application): ApplicationFormState {
 }
 
 export default function HomePage() {
+  const toast = useToast()
+
   const [applications, setApplications] = useState<Application[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -126,10 +107,11 @@ export default function HomePage() {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load applications'
       setError(message)
+      toast.error(message)
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [toast])
 
   useEffect(() => {
     void load()
@@ -175,6 +157,7 @@ export default function HomePage() {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to update status'
       setError(message)
+      toast.error(message)
       await load()
     }
   }
@@ -237,6 +220,7 @@ export default function HomePage() {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to create application'
       setCreateError(message)
+      toast.error(message)
     } finally {
       setIsCreating(false)
     }
@@ -271,6 +255,7 @@ export default function HomePage() {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to parse job description'
       setParseError(message)
+      toast.error(message)
     } finally {
       setIsParsing(false)
     }
@@ -296,6 +281,7 @@ export default function HomePage() {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to generate resume suggestions'
       setResumeError(message)
+      toast.error(message)
     } finally {
       setIsGeneratingBullets(false)
     }
@@ -354,6 +340,7 @@ export default function HomePage() {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to update application'
       setEditError(message)
+      toast.error(message)
     } finally {
       setIsSaving(false)
     }
@@ -374,6 +361,7 @@ export default function HomePage() {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to delete application'
       setEditError(message)
+      toast.error(message)
     } finally {
       setIsDeleting(false)
     }
@@ -390,130 +378,15 @@ export default function HomePage() {
         </p>
       </header>
 
-      <div className="grid gap-4">
-        <section className="rounded-xl border border-[var(--border)] bg-[var(--social-bg)] p-4">
-          <h2 className="text-sm font-medium text-[var(--text-h)]">
-            New application
-          </h2>
+      <div className="grid gap-4 lg:grid-cols-[420px_minmax(0,1fr)] lg:items-start">
+        <div className="grid gap-4">
+          <section className="rounded-xl border border-[var(--border)] bg-[var(--social-bg)] p-4">
+            <h2 className="text-sm font-medium text-[var(--text-h)]">
+              New application
+            </h2>
 
-          <form onSubmit={onCreate} className="mt-3 grid gap-3" noValidate>
-            <div className="grid gap-2">
-              <label className="grid gap-1">
-                <span className="text-xs text-[var(--text)]">
-                  Job description (paste to auto-fill)
-                </span>
-                <textarea
-                  className="input min-h-28 resize-y"
-                  value={jdText}
-                  onChange={(e) => {
-                    setJdText(e.target.value)
-                    setParseResult(null)
-                    setParseError(null)
-                    setResumeBullets(null)
-                    setResumeError(null)
-                    setCopiedBulletIndex(null)
-                    setCopyError(null)
-                  }}
-                  disabled={isCreating || isParsing || isGeneratingBullets}
-                  placeholder="Paste the job description here, then click Parse"
-                />
-              </label>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  className="button"
-                  type="button"
-                  onClick={() => void onParseJd()}
-                  disabled={isCreating || isParsing || isGeneratingBullets}
-                >
-                  {isParsing ? 'Parsing…' : 'Parse'}
-                </button>
-
-                  <button
-                    className="button"
-                    type="button"
-                    onClick={() => void onGenerateResumeBullets()}
-                    disabled={isCreating || isParsing || isGeneratingBullets || !jdText.trim()}
-                  >
-                    {isGeneratingBullets
-                      ? 'Generating…'
-                      : resumeBullets
-                        ? 'Regenerate bullets'
-                        : 'Generate bullets'}
-                  </button>
-
-                {parseResult ? (
-                  <p className="text-xs text-[var(--text)]">
-                    Parsed:{' '}
-                    {parseResult.company ? `Company: ${parseResult.company}` : 'Company: —'}
-                    {parseResult.role ? ` · Role: ${parseResult.role}` : ' · Role: —'}
-                    {parseResult.location ? ` · Location: ${parseResult.location}` : ''}
-                    {parseResult.seniority ? ` · Seniority: ${parseResult.seniority}` : ''}
-                  </p>
-                ) : null}
-              </div>
-
-              {parseError ? (
-                <p className="error" role="alert">
-                  {parseError}
-                </p>
-              ) : null}
-
-              {resumeError ? (
-                <p className="error" role="alert">
-                  {resumeError}
-                </p>
-              ) : null}
-
-              {parseResult && (parseResult.requiredSkills.length > 0 || parseResult.niceToHaveSkills.length > 0) ? (
-                <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3 text-xs text-[var(--text)]">
-                  {parseResult.requiredSkills.length > 0 ? (
-                    <p>
-                      <span className="text-[var(--text-h)]">Required:</span>{' '}
-                      {parseResult.requiredSkills.join(', ')}
-                    </p>
-                  ) : null}
-                  {parseResult.niceToHaveSkills.length > 0 ? (
-                    <p className={parseResult.requiredSkills.length > 0 ? 'mt-1' : ''}>
-                      <span className="text-[var(--text-h)]">Nice-to-have:</span>{' '}
-                      {parseResult.niceToHaveSkills.join(', ')}
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {resumeBullets && resumeBullets.length > 0 ? (
-                <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3 text-xs text-[var(--text)]">
-                  <p className="text-[var(--text-h)]">Resume bullets</p>
-                  <ul className="mt-2 grid gap-2">
-                    {resumeBullets.map((bullet, index) => (
-                      <li
-                        key={`${index}-${bullet.slice(0, 16)}`}
-                        className="flex items-start justify-between gap-3"
-                      >
-                        <span className="flex-1">{bullet}</span>
-                        <button
-                          className="button"
-                          type="button"
-                          onClick={() => void onCopyBullet(bullet, index)}
-                          disabled={isCreating || isParsing || isGeneratingBullets}
-                        >
-                          {copiedBulletIndex === index ? 'Copied' : 'Copy'}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-
-              {copyError ? (
-                <p className="error" role="alert">
-                  {copyError}
-                </p>
-              ) : null}
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <form onSubmit={onCreate} className="mt-3 grid gap-3" noValidate>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <label className="grid gap-1">
                 <span className="text-xs text-[var(--text)]">Company</span>
                 <input
@@ -539,9 +412,136 @@ export default function HomePage() {
                   required
                 />
               </label>
-            </div>
+              </div>
 
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              <details className="rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3">
+                <summary className="cursor-pointer text-xs font-medium text-[var(--text-h)]">
+                  AI assist (optional)
+                </summary>
+                <div className="mt-3 grid gap-2">
+                  <label className="grid gap-1">
+                    <span className="text-xs text-[var(--text)]">
+                      Job description
+                    </span>
+                    <textarea
+                      className="input min-h-28 resize-y"
+                      value={jdText}
+                      onChange={(e) => {
+                        setJdText(e.target.value)
+                        setParseResult(null)
+                        setParseError(null)
+                        setResumeBullets(null)
+                        setResumeError(null)
+                        setCopiedBulletIndex(null)
+                        setCopyError(null)
+                      }}
+                      disabled={isCreating || isParsing || isGeneratingBullets}
+                      placeholder="Paste the job description here"
+                    />
+                  </label>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      className="button"
+                      type="button"
+                      onClick={() => void onParseJd()}
+                      disabled={isCreating || isParsing || isGeneratingBullets}
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        {isParsing ? <Spinner size={14} /> : null}
+                        {isParsing ? 'Parsing…' : 'Parse'}
+                      </span>
+                    </button>
+
+                    <button
+                      className="button"
+                      type="button"
+                      onClick={() => void onGenerateResumeBullets()}
+                      disabled={isCreating || isParsing || isGeneratingBullets || !jdText.trim()}
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        {isGeneratingBullets ? <Spinner size={14} /> : null}
+                        {isGeneratingBullets
+                          ? 'Generating…'
+                          : resumeBullets
+                            ? 'Regenerate bullets'
+                            : 'Generate bullets'}
+                      </span>
+                    </button>
+
+                    {parseResult ? (
+                      <p className="text-xs text-[var(--text)]">
+                        Parsed:{' '}
+                        {parseResult.company ? `Company: ${parseResult.company}` : 'Company: —'}
+                        {parseResult.role ? ` · Role: ${parseResult.role}` : ' · Role: —'}
+                        {parseResult.location ? ` · Location: ${parseResult.location}` : ''}
+                        {parseResult.seniority ? ` · Seniority: ${parseResult.seniority}` : ''}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  {parseError ? (
+                    <p className="error" role="alert">
+                      {parseError}
+                    </p>
+                  ) : null}
+
+                  {resumeError ? (
+                    <p className="error" role="alert">
+                      {resumeError}
+                    </p>
+                  ) : null}
+
+                  {parseResult && (parseResult.requiredSkills.length > 0 || parseResult.niceToHaveSkills.length > 0) ? (
+                    <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3 text-xs text-[var(--text)]">
+                      {parseResult.requiredSkills.length > 0 ? (
+                        <p>
+                          <span className="text-[var(--text-h)]">Required:</span>{' '}
+                          {parseResult.requiredSkills.join(', ')}
+                        </p>
+                      ) : null}
+                      {parseResult.niceToHaveSkills.length > 0 ? (
+                        <p className={parseResult.requiredSkills.length > 0 ? 'mt-1' : ''}>
+                          <span className="text-[var(--text-h)]">Nice-to-have:</span>{' '}
+                          {parseResult.niceToHaveSkills.join(', ')}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  {resumeBullets && resumeBullets.length > 0 ? (
+                    <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3 text-xs text-[var(--text)]">
+                      <p className="text-[var(--text-h)]">Resume bullets</p>
+                      <ul className="mt-2 grid gap-2">
+                        {resumeBullets.map((bullet, index) => (
+                          <li
+                            key={`${index}-${bullet.slice(0, 16)}`}
+                            className="flex items-start justify-between gap-3"
+                          >
+                            <span className="flex-1">{bullet}</span>
+                            <button
+                              className="button"
+                              type="button"
+                              onClick={() => void onCopyBullet(bullet, index)}
+                              disabled={isCreating || isParsing || isGeneratingBullets}
+                            >
+                              {copiedBulletIndex === index ? 'Copied' : 'Copy'}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+
+                  {copyError ? (
+                    <p className="error" role="alert">
+                      {copyError}
+                    </p>
+                  ) : null}
+                </div>
+              </details>
+
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <label className="grid gap-1">
                 <span className="text-xs text-[var(--text)]">Date applied</span>
                 <input
@@ -576,238 +576,264 @@ export default function HomePage() {
                   ))}
                 </select>
               </label>
-
-              <label className="grid gap-1">
-                <span className="text-xs text-[var(--text)]">Salary range (optional)</span>
-                <input
-                  className="input"
-                  value={createForm.salaryRange}
-                  onChange={(e) =>
-                    setCreateForm((p) => ({
-                      ...p,
-                      salaryRange: e.target.value,
-                    }))
-                  }
-                  disabled={isCreating}
-                  placeholder="e.g. 120k-150k"
-                />
-              </label>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <label className="grid gap-1">
-                <span className="text-xs text-[var(--text)]">JD link (optional)</span>
-                <input
-                  className="input"
-                  value={createForm.jdLink}
-                  onChange={(e) =>
-                    setCreateForm((p) => ({ ...p, jdLink: e.target.value }))
-                  }
-                  disabled={isCreating}
-                  placeholder="https://..."
-                />
-              </label>
-
-              <label className="grid gap-1">
-                <span className="text-xs text-[var(--text)]">Notes (optional)</span>
-                <input
-                  className="input"
-                  value={createForm.notes}
-                  onChange={(e) =>
-                    setCreateForm((p) => ({ ...p, notes: e.target.value }))
-                  }
-                  disabled={isCreating}
-                  placeholder="Recruiter, referrals, reminders..."
-                />
-              </label>
-            </div>
-
-            {createError ? (
-              <p className="error" role="alert">
-                {createError}
-              </p>
-            ) : null}
-
-            <div>
-              <button className="button" type="submit" disabled={isCreating}>
-                {isCreating ? 'Creating…' : 'Create'}
-              </button>
-            </div>
-          </form>
-        </section>
-
-        {selectedApplication && editForm ? (
-          <section className="rounded-xl border border-[var(--border)] bg-[var(--social-bg)] p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-sm font-medium text-[var(--text-h)]">
-                  Application details
-                </h2>
-                <p className="mt-1 text-xs text-[var(--text)]">
-                  Edit fields and save, or delete.
-                </p>
-              </div>
-              <button
-                className="button"
-                type="button"
-                onClick={() => setSelectedId(null)}
-                disabled={isSaving || isDeleting}
-              >
-                Close
-              </button>
-            </div>
-
-            <form onSubmit={onSave} className="mt-3 grid gap-3" noValidate>
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                <label className="grid gap-1">
-                  <span className="text-xs text-[var(--text)]">Company</span>
-                  <input
-                    className="input"
-                    value={editForm.company}
-                    onChange={(e) =>
-                      setEditForm((p) =>
-                        p ? { ...p, company: e.target.value } : p,
-                      )
-                    }
-                    disabled={isSaving || isDeleting}
-                    required
-                  />
-                </label>
-
-                <label className="grid gap-1">
-                  <span className="text-xs text-[var(--text)]">Role</span>
-                  <input
-                    className="input"
-                    value={editForm.role}
-                    onChange={(e) =>
-                      setEditForm((p) => (p ? { ...p, role: e.target.value } : p))
-                    }
-                    disabled={isSaving || isDeleting}
-                    required
-                  />
-                </label>
               </div>
 
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                <label className="grid gap-1">
-                  <span className="text-xs text-[var(--text)]">Date applied</span>
-                  <input
-                    className="input"
-                    type="date"
-                    value={editForm.dateApplied}
-                    onChange={(e) =>
-                      setEditForm((p) =>
-                        p ? { ...p, dateApplied: e.target.value } : p,
-                      )
-                    }
-                    disabled={isSaving || isDeleting}
-                    required
-                  />
-                </label>
+              <details className="rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3">
+                <summary className="cursor-pointer text-xs font-medium text-[var(--text-h)]">
+                  Optional fields
+                </summary>
+                <div className="mt-3 grid gap-3">
+                  <label className="grid gap-1">
+                    <span className="text-xs text-[var(--text)]">Salary range</span>
+                    <input
+                      className="input"
+                      value={createForm.salaryRange}
+                      onChange={(e) =>
+                        setCreateForm((p) => ({
+                          ...p,
+                          salaryRange: e.target.value,
+                        }))
+                      }
+                      disabled={isCreating}
+                      placeholder="e.g. 120k-150k"
+                    />
+                  </label>
 
-                <label className="grid gap-1">
-                  <span className="text-xs text-[var(--text)]">Status</span>
-                  <select
-                    className="input"
-                    value={editForm.status}
-                    onChange={(e) =>
-                      setEditForm((p) =>
-                        p
-                          ? {
-                              ...p,
-                              status: e.target.value as ApplicationStatus,
-                            }
-                          : p,
-                      )
-                    }
-                    disabled={isSaving || isDeleting}
-                  >
-                    {STATUSES.map((s) => (
-                      <option key={s} value={s}>
-                        {STATUS_LABEL[s]}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                  <label className="grid gap-1">
+                    <span className="text-xs text-[var(--text)]">JD link</span>
+                    <input
+                      className="input"
+                      value={createForm.jdLink}
+                      onChange={(e) =>
+                        setCreateForm((p) => ({ ...p, jdLink: e.target.value }))
+                      }
+                      disabled={isCreating}
+                      placeholder="https://..."
+                    />
+                  </label>
 
-                <label className="grid gap-1">
-                  <span className="text-xs text-[var(--text)]">Salary range (optional)</span>
-                  <input
-                    className="input"
-                    value={editForm.salaryRange}
-                    onChange={(e) =>
-                      setEditForm((p) =>
-                        p ? { ...p, salaryRange: e.target.value } : p,
-                      )
-                    }
-                    disabled={isSaving || isDeleting}
-                    placeholder="e.g. 120k-150k"
-                  />
-                </label>
-              </div>
+                  <label className="grid gap-1">
+                    <span className="text-xs text-[var(--text)]">Notes</span>
+                    <input
+                      className="input"
+                      value={createForm.notes}
+                      onChange={(e) =>
+                        setCreateForm((p) => ({ ...p, notes: e.target.value }))
+                      }
+                      disabled={isCreating}
+                      placeholder="Recruiter, referrals, reminders..."
+                    />
+                  </label>
+                </div>
+              </details>
 
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                <label className="grid gap-1">
-                  <span className="text-xs text-[var(--text)]">JD link (optional)</span>
-                  <input
-                    className="input"
-                    value={editForm.jdLink}
-                    onChange={(e) =>
-                      setEditForm((p) => (p ? { ...p, jdLink: e.target.value } : p))
-                    }
-                    disabled={isSaving || isDeleting}
-                    placeholder="https://..."
-                  />
-                </label>
-
-                <label className="grid gap-1">
-                  <span className="text-xs text-[var(--text)]">Notes (optional)</span>
-                  <input
-                    className="input"
-                    value={editForm.notes}
-                    onChange={(e) =>
-                      setEditForm((p) => (p ? { ...p, notes: e.target.value } : p))
-                    }
-                    disabled={isSaving || isDeleting}
-                    placeholder="Recruiter, referrals, reminders..."
-                  />
-                </label>
-              </div>
-
-              {editError ? (
+              {createError ? (
                 <p className="error" role="alert">
-                  {editError}
+                  {createError}
                 </p>
               ) : null}
 
-              <div className="flex flex-wrap gap-2">
-                <button className="button" type="submit" disabled={isSaving || isDeleting}>
-                  {isSaving ? 'Saving…' : 'Save changes'}
-                </button>
-                <button
-                  className="button"
-                  type="button"
-                  onClick={() => void onDelete()}
-                  disabled={isSaving || isDeleting}
-                >
-                  {isDeleting ? 'Deleting…' : 'Delete'}
+              <div>
+                <button className="button" type="submit" disabled={isCreating}>
+                  <span className="inline-flex items-center gap-2">
+                    {isCreating ? <Spinner size={14} /> : null}
+                    {isCreating ? 'Creating…' : 'Create'}
+                  </span>
                 </button>
               </div>
             </form>
           </section>
-        ) : null}
 
-        <section>
+          {selectedApplication && editForm ? (
+            <section className="rounded-xl border border-[var(--border)] bg-[var(--social-bg)] p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-sm font-medium text-[var(--text-h)]">
+                    Application details
+                  </h2>
+                  <p className="mt-1 text-xs text-[var(--text)]">
+                    Edit fields and save, or delete.
+                  </p>
+                </div>
+                <button
+                  className="button"
+                  type="button"
+                  onClick={() => setSelectedId(null)}
+                  disabled={isSaving || isDeleting}
+                >
+                  Close
+                </button>
+              </div>
+
+              <form onSubmit={onSave} className="mt-3 grid gap-3" noValidate>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <label className="grid gap-1">
+                    <span className="text-xs text-[var(--text)]">Company</span>
+                    <input
+                      className="input"
+                      value={editForm.company}
+                      onChange={(e) =>
+                        setEditForm((p) =>
+                          p ? { ...p, company: e.target.value } : p,
+                        )
+                      }
+                      disabled={isSaving || isDeleting}
+                      required
+                    />
+                  </label>
+
+                  <label className="grid gap-1">
+                    <span className="text-xs text-[var(--text)]">Role</span>
+                    <input
+                      className="input"
+                      value={editForm.role}
+                      onChange={(e) =>
+                        setEditForm((p) => (p ? { ...p, role: e.target.value } : p))
+                      }
+                      disabled={isSaving || isDeleting}
+                      required
+                    />
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <label className="grid gap-1">
+                    <span className="text-xs text-[var(--text)]">Date applied</span>
+                    <input
+                      className="input"
+                      type="date"
+                      value={editForm.dateApplied}
+                      onChange={(e) =>
+                        setEditForm((p) =>
+                          p ? { ...p, dateApplied: e.target.value } : p,
+                        )
+                      }
+                      disabled={isSaving || isDeleting}
+                      required
+                    />
+                  </label>
+
+                  <label className="grid gap-1">
+                    <span className="text-xs text-[var(--text)]">Status</span>
+                    <select
+                      className="input"
+                      value={editForm.status}
+                      onChange={(e) =>
+                        setEditForm((p) =>
+                          p
+                            ? {
+                                ...p,
+                                status: e.target.value as ApplicationStatus,
+                              }
+                            : p,
+                        )
+                      }
+                      disabled={isSaving || isDeleting}
+                    >
+                      {STATUSES.map((s) => (
+                        <option key={s} value={s}>
+                          {STATUS_LABEL[s]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                <details className="rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3">
+                  <summary className="cursor-pointer text-xs font-medium text-[var(--text-h)]">
+                    Optional fields
+                  </summary>
+                  <div className="mt-3 grid gap-3">
+                    <label className="grid gap-1">
+                      <span className="text-xs text-[var(--text)]">Salary range</span>
+                      <input
+                        className="input"
+                        value={editForm.salaryRange}
+                        onChange={(e) =>
+                          setEditForm((p) =>
+                            p ? { ...p, salaryRange: e.target.value } : p,
+                          )
+                        }
+                        disabled={isSaving || isDeleting}
+                        placeholder="e.g. 120k-150k"
+                      />
+                    </label>
+
+                    <label className="grid gap-1">
+                      <span className="text-xs text-[var(--text)]">JD link</span>
+                      <input
+                        className="input"
+                        value={editForm.jdLink}
+                        onChange={(e) =>
+                          setEditForm((p) => (p ? { ...p, jdLink: e.target.value } : p))
+                        }
+                        disabled={isSaving || isDeleting}
+                        placeholder="https://..."
+                      />
+                    </label>
+
+                    <label className="grid gap-1">
+                      <span className="text-xs text-[var(--text)]">Notes</span>
+                      <input
+                        className="input"
+                        value={editForm.notes}
+                        onChange={(e) =>
+                          setEditForm((p) => (p ? { ...p, notes: e.target.value } : p))
+                        }
+                        disabled={isSaving || isDeleting}
+                        placeholder="Recruiter, referrals, reminders..."
+                      />
+                    </label>
+                  </div>
+                </details>
+
+                {editError ? (
+                  <p className="error" role="alert">
+                    {editError}
+                  </p>
+                ) : null}
+
+                <div className="flex flex-wrap gap-2">
+                  <button className="button" type="submit" disabled={isSaving || isDeleting}>
+                    <span className="inline-flex items-center gap-2">
+                      {isSaving ? <Spinner size={14} /> : null}
+                      {isSaving ? 'Saving…' : 'Save changes'}
+                    </span>
+                  </button>
+                  <button
+                    className="button"
+                    type="button"
+                    onClick={() => void onDelete()}
+                    disabled={isSaving || isDeleting}
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      {isDeleting ? <Spinner size={14} /> : null}
+                      {isDeleting ? 'Deleting…' : 'Delete'}
+                    </span>
+                  </button>
+                </div>
+              </form>
+            </section>
+          ) : null}
+        </div>
+
+        <section className="min-w-0">
           {isLoading ? (
-            <p className="text-sm text-[var(--text)]">Loading…</p>
+            <div className="inline-flex items-center gap-2 text-sm text-[var(--text)]">
+              <Spinner size={16} />
+              <span>Loading…</span>
+            </div>
           ) : error ? (
             <p className="error" role="alert">
               {error}
             </p>
           ) : applications.length === 0 ? (
-            <p className="text-sm text-[var(--text)]">
-              No applications yet. Create your first one above.
-            </p>
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--social-bg)] p-4 text-left">
+              <p className="text-sm text-[var(--text-h)]">No applications yet</p>
+              <p className="mt-1 text-sm text-[var(--text)]">
+                Create your first application above. Tip: paste a job description and use Parse to auto-fill.
+              </p>
+            </div>
           ) : (
             <KanbanBoard
               applications={boardApps}
