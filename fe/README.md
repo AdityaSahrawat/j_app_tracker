@@ -1,5 +1,17 @@
 # React + TypeScript + Vite
 
+## Setup
+
+```bash
+cd fe
+cp .env.example .env
+npm install
+npm run dev
+```
+
+The app expects your backend to run on `http://localhost:4000` by default.
+Override with `VITE_API_URL` in `.env`.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:
