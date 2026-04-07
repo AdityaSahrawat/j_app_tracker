@@ -6,6 +6,7 @@ import {
   updateApplication,
   type Application,
 } from '../api/applications'
+import { parseJobDescription, type ParsedJobDescription } from '../api/ai'
 import { KanbanBoard, type KanbanApplication } from '../kanban/KanbanBoard'
 import { STATUSES, STATUS_LABEL, type ApplicationStatus } from '../kanban/types'
 
@@ -64,6 +65,11 @@ export default function HomePage() {
   }))
   const [createError, setCreateError] = useState<string | null>(null)
   const [isCreating, setIsCreating] = useState(false)
+
+  const [jdText, setJdText] = useState('')
+  const [parseResult, setParseResult] = useState<ParsedJobDescription | null>(null)
+  const [parseError, setParseError] = useState<string | null>(null)
+  const [isParsing, setIsParsing] = useState(false)
 
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const selectedApplication = useMemo(
@@ -184,6 +190,10 @@ export default function HomePage() {
         salaryRange: '',
       })
 
+      setJdText('')
+      setParseResult(null)
+      setParseError(null)
+
       setSelectedId(res.application.id)
       await load()
     } catch (err) {
@@ -191,6 +201,36 @@ export default function HomePage() {
       setCreateError(message)
     } finally {
       setIsCreating(false)
+    }
+  }
+
+  const onParseJd = async () => {
+    setParseError(null)
+    setCreateError(null)
+
+    const text = jdText.trim()
+    if (!text) {
+      setParseError('Paste a job description first')
+      return
+    }
+
+    setIsParsing(true)
+    setParseResult(null)
+
+    try {
+      const res = await parseJobDescription(text)
+      setParseResult(res.parsed)
+
+      setCreateForm((prev) => ({
+        ...prev,
+        company: prev.company.trim() ? prev.company : res.parsed.company ?? prev.company,
+        role: prev.role.trim() ? prev.role : res.parsed.role ?? prev.role,
+      }))
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to parse job description'
+      setParseError(message)
+    } finally {
+      setIsParsing(false)
     }
   }
 
@@ -278,6 +318,69 @@ export default function HomePage() {
           </h2>
 
           <form onSubmit={onCreate} className="mt-3 grid gap-3" noValidate>
+            <div className="grid gap-2">
+              <label className="grid gap-1">
+                <span className="text-xs text-[var(--text)]">
+                  Job description (paste to auto-fill)
+                </span>
+                <textarea
+                  className="input min-h-28 resize-y"
+                  value={jdText}
+                  onChange={(e) => {
+                    setJdText(e.target.value)
+                    setParseResult(null)
+                    setParseError(null)
+                  }}
+                  disabled={isCreating || isParsing}
+                  placeholder="Paste the job description here, then click Parse"
+                />
+              </label>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  className="button"
+                  type="button"
+                  onClick={() => void onParseJd()}
+                  disabled={isCreating || isParsing}
+                >
+                  {isParsing ? 'Parsing…' : 'Parse'}
+                </button>
+
+                {parseResult ? (
+                  <p className="text-xs text-[var(--text)]">
+                    Parsed:{' '}
+                    {parseResult.company ? `Company: ${parseResult.company}` : 'Company: —'}
+                    {parseResult.role ? ` · Role: ${parseResult.role}` : ' · Role: —'}
+                    {parseResult.location ? ` · Location: ${parseResult.location}` : ''}
+                    {parseResult.seniority ? ` · Seniority: ${parseResult.seniority}` : ''}
+                  </p>
+                ) : null}
+              </div>
+
+              {parseError ? (
+                <p className="error" role="alert">
+                  {parseError}
+                </p>
+              ) : null}
+
+              {parseResult && (parseResult.requiredSkills.length > 0 || parseResult.niceToHaveSkills.length > 0) ? (
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3 text-xs text-[var(--text)]">
+                  {parseResult.requiredSkills.length > 0 ? (
+                    <p>
+                      <span className="text-[var(--text-h)]">Required:</span>{' '}
+                      {parseResult.requiredSkills.join(', ')}
+                    </p>
+                  ) : null}
+                  {parseResult.niceToHaveSkills.length > 0 ? (
+                    <p className={parseResult.requiredSkills.length > 0 ? 'mt-1' : ''}>
+                      <span className="text-[var(--text-h)]">Nice-to-have:</span>{' '}
+                      {parseResult.niceToHaveSkills.join(', ')}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <label className="grid gap-1">
                 <span className="text-xs text-[var(--text)]">Company</span>

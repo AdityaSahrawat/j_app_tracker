@@ -6,6 +6,7 @@
 cd be
 cp .env.example .env
 # then edit .env and set MONGODB_URI + JWT_SECRET
+# (optional) set OPENAI_API_KEY to enable AI parsing
 npm install
 npm run dev
 ```
@@ -21,7 +22,9 @@ npm run dev
 - `PATCH /api/applications/:id` → update application (protected)
 - `DELETE /api/applications/:id` → delete application (protected)
 
+- `POST /api/ai/parse-jd` → parse a job description (protected)
+
 - `GET /api/items` → list items (protected, demo)
 - `POST /api/items` → create item `{ "name": "..." }` (protected, demo)
 
-`/api/items` is protected — send `Authorization: Bearer <token>`.
+Protected routes require `Authorization: Bearer <token>`.

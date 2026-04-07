@@ -8,6 +8,9 @@ export type Env = {
   JWT_SECRET: string;
   JWT_EXPIRES_IN: StringValue;
   BCRYPT_SALT_ROUNDS: number;
+  OPENAI_API_KEY?: string;
+  OPENAI_MODEL: string;
+  OPENAI_BASE_URL: string;
 };
 
 let cachedEnv: Env | null = null;
@@ -39,6 +42,15 @@ export function getEnv(): Env {
   const saltRoundsRaw = process.env.BCRYPT_SALT_ROUNDS ?? "12";
   const saltRounds = Number.parseInt(saltRoundsRaw, 10);
 
+  const openaiApiKeyRaw = process.env.OPENAI_API_KEY;
+  const openaiApiKey = typeof openaiApiKeyRaw === "string" && openaiApiKeyRaw.trim() ? openaiApiKeyRaw.trim() : undefined;
+
+  const openaiModelRaw = process.env.OPENAI_MODEL;
+  const openaiModel = typeof openaiModelRaw === "string" && openaiModelRaw.trim() ? openaiModelRaw.trim() : "gpt-4o-mini";
+
+  const openaiBaseUrlRaw = process.env.OPENAI_BASE_URL;
+  const openaiBaseUrl = typeof openaiBaseUrlRaw === "string" && openaiBaseUrlRaw.trim() ? openaiBaseUrlRaw.trim() : "https://api.openai.com/v1";
+
   cachedEnv = {
     NODE_ENV: nodeEnv,
     PORT: Number.isFinite(port) ? port : 4000,
@@ -46,6 +58,9 @@ export function getEnv(): Env {
     JWT_SECRET: jwtSecret,
     JWT_EXPIRES_IN: jwtExpiresIn,
     BCRYPT_SALT_ROUNDS: Number.isFinite(saltRounds) ? saltRounds : 12,
+    OPENAI_API_KEY: openaiApiKey,
+    OPENAI_MODEL: openaiModel,
+    OPENAI_BASE_URL: openaiBaseUrl,
   };
 
   return cachedEnv;
