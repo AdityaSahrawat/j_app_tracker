@@ -23,6 +23,7 @@ npm run dev
 - `DELETE /api/applications/:id` → delete application (protected)
 
 - `POST /api/ai/parse-jd` → parse a job description (protected)
+- `POST /api/ai/resume-suggestions` → generate 3-5 resume bullets for a job description (protected)
 
 - `GET /api/items` → list items (protected, demo)
 - `POST /api/items` → create item `{ "name": "..." }` (protected, demo)

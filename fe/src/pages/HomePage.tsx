@@ -6,7 +6,11 @@ import {
   updateApplication,
   type Application,
 } from '../api/applications'
-import { parseJobDescription, type ParsedJobDescription } from '../api/ai'
+import {
+  getResumeSuggestions,
+  parseJobDescription,
+  type ParsedJobDescription,
+} from '../api/ai'
 import { KanbanBoard, type KanbanApplication } from '../kanban/KanbanBoard'
 import { STATUSES, STATUS_LABEL, type ApplicationStatus } from '../kanban/types'
 
@@ -35,6 +39,30 @@ function toOptionalTrimmed(value: string): string | undefined {
 
 function isValidIsoDate(value: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(value)
+}
+
+async function copyToClipboard(text: string): Promise<void> {
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+    await navigator.clipboard.writeText(text)
+    return
+  }
+
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.setAttribute('readonly', 'true')
+  textarea.style.position = 'fixed'
+  textarea.style.left = '-9999px'
+  textarea.style.top = '0'
+  document.body.appendChild(textarea)
+  textarea.focus()
+  textarea.select()
+
+  const ok = document.execCommand('copy')
+  document.body.removeChild(textarea)
+
+  if (!ok) {
+    throw new Error('Copy failed')
+  }
 }
 
 function buildFormFromApplication(app: Application): ApplicationFormState {
@@ -70,6 +98,12 @@ export default function HomePage() {
   const [parseResult, setParseResult] = useState<ParsedJobDescription | null>(null)
   const [parseError, setParseError] = useState<string | null>(null)
   const [isParsing, setIsParsing] = useState(false)
+
+  const [resumeBullets, setResumeBullets] = useState<string[] | null>(null)
+  const [resumeError, setResumeError] = useState<string | null>(null)
+  const [isGeneratingBullets, setIsGeneratingBullets] = useState(false)
+  const [copiedBulletIndex, setCopiedBulletIndex] = useState<number | null>(null)
+  const [copyError, setCopyError] = useState<string | null>(null)
 
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const selectedApplication = useMemo(
@@ -193,6 +227,10 @@ export default function HomePage() {
       setJdText('')
       setParseResult(null)
       setParseError(null)
+      setResumeBullets(null)
+      setResumeError(null)
+      setCopiedBulletIndex(null)
+      setCopyError(null)
 
       setSelectedId(res.application.id)
       await load()
@@ -207,6 +245,10 @@ export default function HomePage() {
   const onParseJd = async () => {
     setParseError(null)
     setCreateError(null)
+    setResumeBullets(null)
+    setResumeError(null)
+    setCopiedBulletIndex(null)
+    setCopyError(null)
 
     const text = jdText.trim()
     if (!text) {
@@ -231,6 +273,43 @@ export default function HomePage() {
       setParseError(message)
     } finally {
       setIsParsing(false)
+    }
+  }
+
+  const onGenerateResumeBullets = async () => {
+    setResumeError(null)
+    setCopyError(null)
+
+    const text = jdText.trim()
+    if (!text) {
+      setResumeError('Paste a job description first')
+      return
+    }
+
+    setIsGeneratingBullets(true)
+    setResumeBullets(null)
+    setCopiedBulletIndex(null)
+
+    try {
+      const res = await getResumeSuggestions(text, parseResult ?? undefined)
+      setResumeBullets(res.bullets)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to generate resume suggestions'
+      setResumeError(message)
+    } finally {
+      setIsGeneratingBullets(false)
+    }
+  }
+
+  const onCopyBullet = async (bullet: string, index: number) => {
+    setCopyError(null)
+
+    try {
+      await copyToClipboard(bullet)
+      setCopiedBulletIndex(index)
+      window.setTimeout(() => setCopiedBulletIndex(null), 1200)
+    } catch {
+      setCopyError('Copy failed — your browser may block clipboard access')
     }
   }
 
@@ -330,8 +409,12 @@ export default function HomePage() {
                     setJdText(e.target.value)
                     setParseResult(null)
                     setParseError(null)
+                    setResumeBullets(null)
+                    setResumeError(null)
+                    setCopiedBulletIndex(null)
+                    setCopyError(null)
                   }}
-                  disabled={isCreating || isParsing}
+                  disabled={isCreating || isParsing || isGeneratingBullets}
                   placeholder="Paste the job description here, then click Parse"
                 />
               </label>
@@ -341,10 +424,23 @@ export default function HomePage() {
                   className="button"
                   type="button"
                   onClick={() => void onParseJd()}
-                  disabled={isCreating || isParsing}
+                  disabled={isCreating || isParsing || isGeneratingBullets}
                 >
                   {isParsing ? 'Parsing…' : 'Parse'}
                 </button>
+
+                  <button
+                    className="button"
+                    type="button"
+                    onClick={() => void onGenerateResumeBullets()}
+                    disabled={isCreating || isParsing || isGeneratingBullets || !jdText.trim()}
+                  >
+                    {isGeneratingBullets
+                      ? 'Generating…'
+                      : resumeBullets
+                        ? 'Regenerate bullets'
+                        : 'Generate bullets'}
+                  </button>
 
                 {parseResult ? (
                   <p className="text-xs text-[var(--text)]">
@@ -363,6 +459,12 @@ export default function HomePage() {
                 </p>
               ) : null}
 
+              {resumeError ? (
+                <p className="error" role="alert">
+                  {resumeError}
+                </p>
+              ) : null}
+
               {parseResult && (parseResult.requiredSkills.length > 0 || parseResult.niceToHaveSkills.length > 0) ? (
                 <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3 text-xs text-[var(--text)]">
                   {parseResult.requiredSkills.length > 0 ? (
@@ -378,6 +480,36 @@ export default function HomePage() {
                     </p>
                   ) : null}
                 </div>
+              ) : null}
+
+              {resumeBullets && resumeBullets.length > 0 ? (
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3 text-xs text-[var(--text)]">
+                  <p className="text-[var(--text-h)]">Resume bullets</p>
+                  <ul className="mt-2 grid gap-2">
+                    {resumeBullets.map((bullet, index) => (
+                      <li
+                        key={`${index}-${bullet.slice(0, 16)}`}
+                        className="flex items-start justify-between gap-3"
+                      >
+                        <span className="flex-1">{bullet}</span>
+                        <button
+                          className="button"
+                          type="button"
+                          onClick={() => void onCopyBullet(bullet, index)}
+                          disabled={isCreating || isParsing || isGeneratingBullets}
+                        >
+                          {copiedBulletIndex === index ? 'Copied' : 'Copy'}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              {copyError ? (
+                <p className="error" role="alert">
+                  {copyError}
+                </p>
               ) : null}
             </div>
 
